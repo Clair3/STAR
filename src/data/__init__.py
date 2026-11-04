@@ -1,3 +1,3 @@
-from .datamodules import ContrastiveDataModule, ForecastingDataModule
+from .datamodules import ForecastingDataModule
 from .transform import RandomFeatureMask, RandomGaussianJitter
 from .datasets import ForecastingTrainDataset, ForecastingValDataset

@@ -17,8 +17,9 @@ from pytorch_lightning.callbacks import (
     LearningRateMonitor,
 )
 
-from data import ContrastiveDataModule, ForecastingDataModule
-from modules import ContrastiveModule, ForecastingModule
+from data import ForecastingDataModule
+from modules import ForecastingModule
+
 from models import (
     TimeSeriesTransformerEncoder,
     CLSHead,
@@ -155,52 +156,6 @@ class BaseExperiment:
         print(f"Time per batch: {start.elapsed_time(end)/1000:.3f} s")
 
 
-class ContrastiveExperiment(BaseExperiment):
-
-    def build_datamodule(self):
-        return ContrastiveDataModule(
-            data_config=self.data_config,
-            batch_size=self.config.batch_size,
-            num_workers=self.config["num_workers"],
-        )
-
-    def build_model(self):
-        encoder_veg = TimeSeriesTransformerEncoder(
-            input_dim=len(self.data_config["vegetation"]["variables"]),
-            sequence_length=self.data_config["vegetation"]["sequence_length"],
-            d_model=self.config.d_model,
-            num_heads=self.config.num_heads,
-            num_layers=self.config.num_layers,
-            dropout=self.config.dropout,
-            use_cls=self.config.use_cls,
-            seasonal_positional_encoding=self.config.seasonal_positional_encoding,
-        )
-
-        encoder_weather = TimeSeriesTransformerEncoder(
-            input_dim=len(self.data_config["weather"]["variables"]),
-            sequence_length=self.data_config["weather"]["sequence_length"],
-            d_model=self.config.d_model,
-            num_heads=self.config.num_heads,
-            num_layers=self.config.num_layers,
-            dropout=self.config.dropout,
-            use_cls=self.config.use_cls,
-            seasonal_positional_encoding=self.config.seasonal_positional_encoding,
-        )
-
-        self.encoder_veg = encoder_veg
-        self.encoder_weather = encoder_weather
-
-        vegetation_model = CLSHead(encoder_veg)
-        weather_model = CLSHead(encoder_weather)
-
-        contrastive_module = ContrastiveModule(
-            encoder_veg=vegetation_model,
-            encoder_weather=weather_model,
-            cfg=dict(self.config),
-        )
-        return contrastive_module
-
-
 class ForecastingExperiment(BaseExperiment):
 
     def build_datamodule(self):
@@ -213,15 +168,6 @@ class ForecastingExperiment(BaseExperiment):
         )
 
     def build_model(self):
-        # if self.config.model_name == "TransformerBaseline":
-        #
-        #     self.model = ModelClass[self.config.model_name](
-        #         data_config=self.data_config,
-        #         config=self.config,
-        #     )
-        #     pretrained_checkpoint = getattr(self, "pretrained_checkpoint", None)
-        #     self.model= self.load_model(self.model, run_name)
-        # else:
         self.model = ModelClass[self.config.model_name](
             data_config=self.data_config,
             config=self.config,
@@ -233,35 +179,6 @@ class ForecastingExperiment(BaseExperiment):
         )
         return forecasting_module
 
-
-class PretrainThenForecastExperiment(BaseExperiment):
-    """
-    Runs contrastive pretraining first, then uses the pretrained encoders
-    for forecasting.
-    """
-
-    def __init__(self, config, data_config):
-        super().__init__(config, data_config)
-
-        self.contrastive_experiment = ContrastiveExperiment(config, data_config)
-        self.forecasting_experiment = ForecastingExperiment(config, data_config)
-
-    def run(self, profile_resources=False):
-        # Step 1: Pretrain contrastive model
-        print("=== Step 1: Contrastive pretraining ===")
-        self.contrastive_experiment.run(profile_resources=profile_resources)
-
-        # Load pretrained encoders
-        encoder_veg = self.contrastive_experiment.encoder_veg
-        encoder_weather = self.contrastive_experiment.encoder_weather
-
-        # Step 2: Forecasting with pretrained encoders
-        print("=== Step 2: Forecasting finetuning ===")
-        self.forecasting_experiment.pretrained_encoders = {
-            "veg": encoder_veg,
-            "weather": encoder_weather,
-        }
-        self.forecasting_experiment.run(profile_resources=profile_resources)
 
 
 @contextmanager
@@ -282,14 +199,11 @@ def wandb_run(config, group=None, project="contrastive-earthnet", run_name=None)
 def run_experiment(config, data_config, profile_resources=False, run_name=None):
     task = config["task"]
 
-    if task == "contrastive":
-        experiment = ContrastiveExperiment(config, data_config)
-    elif task == "forecasting":
+    if task == "forecasting":
         experiment = ForecastingExperiment(config, data_config)
-    elif task == "pretrain_then_forecast":
-        experiment = PretrainThenForecastExperiment(config, data_config)
     else:
         raise ValueError(f"Unknown experiment task: {task}")
+    
     if run_name is not None:
         experiment.eval(run_name=run_name)
     else:
@@ -414,7 +328,7 @@ if __name__ == "__main__":
 
     parser.add_argument(
         "--train_config_file",
-        default="defaults/transformer_timemixer.yaml",  # _pretrain_forecast.yaml",
+        default="default_models.yaml",  # _pretrain_forecast.yaml",
         help="Path to training config file (relative to project/configs/)",
     )
     parser.add_argument(
@@ -424,7 +338,7 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--run_name",
-        default=None, #"fdq12lyf", # "9w14zh8e",  # None, #"d7s0pwof",  # None,  # "1id511n8",  # "40g3alip",  # ng4jsfgi",  # None,  # "bderu1i9",  # "bderu1i9", "scd7t68g", # None #"aj40n2mg", # None, #"0vh39sji", #"5umw093g",  # None,  # "chkpceo7", #"ewdpengg",  # None,  # "yom83w3e",  # None,  # "ho47mfll",  # None,  # "rysja5hl",  # None, # "lxqlhali",  # None, #"6tvil6wq",  # "r30aeonh",  # None,  # "6tvil6wq",  # None,  # "o03jeetw", # None, #"j3fgpisl", #"za90ubzz",  # None,  # "ug77kly8",  # None,  # "yqbclumu",  # None,  # "d0686mzv",  # None,  # "ppj1fh2v", #None,  # "a28nl7qz",  # None,  # "fleagmb2",  # None,  # "g4u7970n",  # "k6qige6q",  # "qoj0owg6",  # "53mphdie",  # "j1oq2t6k",  # "0epb2ml8",  # "j1oq2t6k", "qoj0owg6",  #
+        default=None, #"fdq12lyf", 
         help="Path of the model weights. If None, the training of the experiment is executed. If a path is provided, the evaluation mode is executed.",
     )
     parser.add_argument(

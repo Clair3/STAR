@@ -626,7 +626,7 @@ def main():
 
     print("\n========================================")
 
-    print("RAFT retrieval preprocessing complete.")
+    print("Retrieval preprocessing complete.")
 
 
 if __name__ == "__main__":
