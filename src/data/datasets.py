@@ -55,7 +55,7 @@ class BaseDataset(Dataset):
         print(f"context: {context_days} days -> {self.context_length} steps")
         print(f"prediction: {prediction_days} days -> {self.prediction_length} steps")
 
-        self.stride = days_to_steps(15, sampling_days)
+        self.stride = days_to_steps(5, sampling_days)
 
         self._create_training_pairs()
         self._preload_data()

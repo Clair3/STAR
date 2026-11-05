@@ -282,12 +282,6 @@ class ForecastModel(nn.Module):
                 {
                     "num_heads": config.num_heads,
                     "dropout": config.dropout,
-                    "seasonal_positional_encoding": config.seasonal_positional_encoding,
-                    "use_cls": (
-                        config.get("use_cls", False)
-                        if isinstance(config, dict)
-                        else config.use_cls
-                    ),
                 }
             )
 

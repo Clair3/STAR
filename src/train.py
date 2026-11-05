@@ -22,7 +22,6 @@ from modules import ForecastingModule
 
 from models import (
     TimeSeriesTransformerEncoder,
-    CLSHead,
     ModelClass,
 )
 
@@ -45,7 +44,7 @@ class BaseExperiment:
             config = SimpleNamespace(**config)
         self.config = config
         self.data_config = data_config
-        self.logger = WandbLogger(project="contrastive-earthnet", log_model="best")
+        self.logger = WandbLogger(project="star", log_model="best")
 
     def build_datamodule(self):
         raise NotImplementedError
@@ -182,7 +181,7 @@ class ForecastingExperiment(BaseExperiment):
 
 
 @contextmanager
-def wandb_run(config, group=None, project="contrastive-earthnet", run_name=None):
+def wandb_run(config, group=None, project="star", run_name=None):
     if run_name is not None:
         api = wandb.Api()
         run = api.run(f"paper_2/{project}/{run_name}")
@@ -338,7 +337,7 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--run_name",
-        default=None, #"fdq12lyf", 
+        default="9cn5s743", #None, #"fdq12lyf", 
         help="Path of the model weights. If None, the training of the experiment is executed. If a path is provided, the evaluation mode is executed.",
     )
     parser.add_argument(
