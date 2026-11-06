@@ -18,6 +18,8 @@
 configs/
 logs/
 RetrievalDatasets/
+outputs/
+wandb/
 
 
 # Byte-compiled / optimized / DLL files

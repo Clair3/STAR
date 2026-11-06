@@ -1,6 +1,6 @@
 from .encoders import TimeSeriesTransformerEncoder, build_encoder
 
-from .forecasting import (
+from .forecasters import (
     LSTM,
     LinearRegressionBaseline,
     MLP,
@@ -9,7 +9,7 @@ from .forecasting import (
 )
 
 
-from .external_forecasting import (
+from .benchmark_forcasters import (
     TimeXer,
     TimeMixer,
     PatchTST,

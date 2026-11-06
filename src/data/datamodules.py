@@ -16,64 +16,6 @@ from .memory_bank import MemoryBank
 def days_to_steps(days: int, sampling_days: int) -> int:
     return max(1, round(days / sampling_days))
 
-
-# class ContrastiveDataModule(LightningDataModule):
-#     """
-#     DataModule for temporal contrastive learning with a held-out test year.
-#     """
-# 
-#     def __init__(
-#         self,
-#         data_config,
-#         batch_size=16,
-#         num_workers=16,
-#     ):
-#         """
-#         test_year: index of the held-out year in Zarr array
-#         """
-#         super().__init__()
-#         self.batch_size = batch_size
-#         self.num_workers = num_workers
-#         self.dataset_path = Path(data_config["path"])
-#         self.vegetation_indices = data_config["vegetation"]["variables"]
-#         self.weather_vars = data_config["weather"]["variables"]
-# 
-#         self.train_years = data_config["contrastive"]["train"]
-#         self.val_years = data_config["contrastive"]["validation"]
-#         self.test_years = data_config["contrastive"]["test"]
-#         self.batch_sampler = data_config["contrastive"].get("batch_sampler", False)
-# 
-# 
-#     def setup(self, stage=None):
-#         self.train_dataset = self._build_dataset(years=self.train_years)
-#         self.val_dataset = self._build_dataset(years=self.val_years)
-#         self.test_dataset = self._build_dataset(years=self.test_years)
-# 
-#     def _build_dataloader(self, dataset, shuffle=True):
-# 
-#         if self.batch_sampler:
-#             return DataLoader(
-#                 dataset,
-#                 batch_sampler=BatchSampler(
-#                     dataset=dataset,
-#                     shuffle=shuffle,
-#                 ),
-#                 num_workers=self.num_workers,
-#                 collate_fn=safe_collate,
-#                 pin_memory=True,
-#                 persistent_workers=self.num_workers > 0,
-#             )
-#         else:
-#             return DataLoader(
-#                 dataset,
-#                 batch_size=self.batch_size,
-#                 shuffle=shuffle,
-#                 num_workers=self.num_workers,
-#                 collate_fn=safe_collate,
-#                 pin_memory=True,
-#                 persistent_workers=self.num_workers > 0,
-#             )
-# 
 class ForecastingDataModule(LightningDataModule):
     def __init__(
         self,

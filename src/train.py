@@ -30,6 +30,10 @@ CONFIG_DIR = PROJECT_DIR / "configs"
 OUTPUT_DIR = PROJECT_DIR / "outputs"
 CHECKPOINT_DIR = OUTPUT_DIR / "checkpoints"
 PREDICTIONS_DIR = OUTPUT_DIR / "predictions"
+WANDB_ENTITY = "paper_2"
+WANDB_DIR = OUTPUT_DIR / "wandb"
+
+os.makedirs(WANDB_DIR, exist_ok=True)
 
 
 def load_config(config_path: str) -> dict:
@@ -44,7 +48,12 @@ class BaseExperiment:
             config = SimpleNamespace(**config)
         self.config = config
         self.data_config = data_config
-        self.logger = WandbLogger(project="star", log_model="best")
+        self.logger = WandbLogger(
+            project="star",
+            entity=WANDB_ENTITY,
+            save_dir=str(WANDB_DIR),
+            log_model="best",
+        )
 
     def build_datamodule(self):
         raise NotImplementedError
@@ -184,15 +193,22 @@ class ForecastingExperiment(BaseExperiment):
 def wandb_run(config, group=None, project="star", run_name=None):
     if run_name is not None:
         api = wandb.Api()
-        run = api.run(f"paper_2/{project}/{run_name}")
+        run = api.run(f"{WANDB_ENTITY}/{project}/{run_name}")
         yield run.config
 
     else:
-        run = wandb.init(project=project, group=group, config=config)
+        run = wandb.init(
+            project=project,
+            entity=WANDB_ENTITY,
+            group=group,
+            config=config,
+            dir=str(WANDB_DIR),
+            reinit=True,
+        )
         try:
             yield run.config
         finally:
-            run.finish()
+            wandb.finish()
 
 
 def run_experiment(config, data_config, profile_resources=False, run_name=None):
@@ -337,7 +353,7 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--run_name",
-        default="9cn5s743", #None, #"fdq12lyf", 
+        default=None, #"9cn5s743", #None, #"fdq12lyf", 
         help="Path of the model weights. If None, the training of the experiment is executed. If a path is provided, the evaluation mode is executed.",
     )
     parser.add_argument(

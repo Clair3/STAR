@@ -459,6 +459,239 @@ class ForecastModel(nn.Module):
         return prediction
 
 
+class RetrievalModel(nn.Module):
+
+    def __init__(self, data_config, config):
+
+        super().__init__()
+
+        veg_dim = len(data_config["vegetation"]["variables"])
+
+        weather_dim = len(data_config["weather"]["variables"])
+
+        context_length = days_to_steps(
+            config.context_days,
+            data_config["sampling_days"],
+        )
+
+        prediction_length = days_to_steps(
+            config.prediction_days,
+            data_config["sampling_days"],
+        )
+
+        climate_dim = veg_dim + weather_dim
+
+        d_model = config.d_model
+
+        # --------------------------------------------------------------
+        # Day-of-year encoding
+        # --------------------------------------------------------------
+
+        self.doy_encoding = DayOfYearEncoding()
+
+        encoder_kwargs = {
+            "num_layers": config.num_layers,
+        }
+
+        print("encoder_name:", config.encoder_name)
+        print("encoder_kwargs:", encoder_kwargs)
+
+        if config.encoder_name == "transformer":
+            encoder_kwargs.update(
+                {
+                    "num_heads": config.num_heads,
+                    "dropout": config.dropout,
+                }
+            )
+
+        elif config.encoder_name == "mamba":
+            encoder_kwargs.update(
+                {
+                    "mamba_d_state": config.mamba_d_state,
+                    "mamba_d_conv": config.mamba_d_conv,
+                    "mamba_expand": config.mamba_expand,
+                    "mamba_headdim": config.mamba_headdim,
+                }
+            )
+        print("encoder_name:", config.encoder_name)
+        print("encoder_kwargs:", encoder_kwargs)
+
+
+
+        # --------------------------------------------------------------
+        # History
+        # --------------------------------------------------------------
+
+        self.hist_encoder = build_encoder(
+            name=config.encoder_name,
+            input_dim=climate_dim + 2,
+            sequence_length=context_length,
+            d_model=d_model,
+            **encoder_kwargs,
+        )
+
+        # --------------------------------------------------------------
+        # Future weather
+        # --------------------------------------------------------------
+
+        self.weather_encoder = build_encoder(
+            name=config.encoder_name,
+            input_dim=weather_dim + 2,
+            sequence_length=prediction_length,
+            d_model=d_model,
+            **encoder_kwargs,
+        )
+
+        # --------------------------------------------------------------
+        # Retrieval encoder
+        # --------------------------------------------------------------
+
+        self.retrieval_encoder = build_encoder(
+            name=config.encoder_name,
+            input_dim=climate_dim + 2,
+            sequence_length=prediction_length,
+            d_model=d_model,
+            **encoder_kwargs,
+        )
+
+        # --------------------------------------------------------------
+        # Cross-attention
+        # --------------------------------------------------------------
+        self.cross_attention = nn.MultiheadAttention(
+            embed_dim=d_model,
+            num_heads=config.num_heads,
+            dropout=config.dropout,
+            batch_first=True,
+        )
+
+        # --------------------------------------------------------------
+        # Fusion
+        # --------------------------------------------------------------
+        self.fusion = nn.Sequential(
+            nn.Linear(
+                3 * d_model,
+                d_model,
+            ),
+            nn.GELU(),
+            nn.Dropout(config.dropout),
+        )
+
+        # --------------------------------------------------------------
+        # Mixer
+        # --------------------------------------------------------------
+        self.mixers = nn.Sequential(
+            *[
+                MixerBlock(
+                    d_model=d_model,
+                    dropout=config.dropout,
+                )
+                for _ in range(config.num_layers)
+            ]
+        )
+
+        # --------------------------------------------------------------
+        # Prediction head
+        # --------------------------------------------------------------
+
+        self.head = nn.Linear(
+            d_model,
+            veg_dim,
+        )
+
+    def _with_doy(self, x, doy):
+
+        return torch.cat(
+            [
+                x,
+                self.doy_encoding(doy),
+            ],
+            dim=-1,
+        )
+
+    def forward(self, batch):
+
+        # ==============================================================
+        # History
+        # ==============================================================
+
+        retrievals = batch["retrievals"]
+
+
+        vegetation_history = batch["vegetation_history"]
+
+        weather_history = batch["weather_history"]
+
+        # --------------------------------------------------------------
+        # Concatenate normalized history
+        # --------------------------------------------------------------
+
+        hist = torch.cat(
+            [
+                vegetation_history,
+                weather_history,
+            ],
+            dim=-1,
+        )
+
+        hist = self._with_doy(
+            hist,
+            batch["hist_doy"],
+        )
+
+        hist_features = self.hist_encoder(hist)
+
+        # ==============================================================
+        # Future weather
+        # ==============================================================
+
+        weather = batch["weather_forecast"]
+
+        weather = self._with_doy(
+            weather,
+            batch["forecast_doy"],
+        )
+
+        weather_features = self.weather_encoder(weather)
+
+        # ==============================================================
+        # Retrieve relevant history
+        # ==============================================================
+
+        history_context, _ = self.cross_attention(
+            query=weather_features,
+            key=hist_features,
+            value=hist_features,
+        )
+
+        # ==============================================================
+        # Fusion
+        # ==============================================================
+
+        x = torch.cat(
+            [
+                weather_features,
+                history_context,
+            ],
+            dim=-1,
+        )
+
+        x = self.fusion(x)
+
+        # ==============================================================
+        # Mixer
+        # ==============================================================
+
+        x = self.mixers(x)
+
+        # ==============================================================
+        # Forecast in normalized vegetation space
+        # ==============================================================
+
+        prediction = self.head(x)
+
+        return prediction
+
+
 
 class RAFT(nn.Module):
     """
